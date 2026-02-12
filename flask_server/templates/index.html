@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 BMP280 Temperature Monitor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: white;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .subtitle {
+            text-align: center;
+            color: rgba(255,255,255,0.9);
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+        }
+
+        .card-title {
+            font-size: 1.2em;
+            color: #667eea;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        .temperature-display {
+            font-size: 3.5em;
+            font-weight: bold;
+            color: #764ba2;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .temperature-display .unit {
+            font-size: 0.5em;
+            color: #999;
+        }
+
+        .temperature-fahrenheit {
+            text-align: center;
+            font-size: 1.3em;
+            color: #666;
+            margin-top: -10px;
+        }
+
+        .status {
+            padding: 10px 15px;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: 500;
+            margin-top: 10px;
+        }
+
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.waiting {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .stat-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .history-card {
+            grid-column: 1 / -1;
+        }
+
+        .history-list {
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+
+        .history-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            transition: background 0.2s ease;
+        }
+
+        .history-item:hover {
+            background: #f8f9fa;
+        }
+
+        .history-time {
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .history-temp {
+            font-weight: 600;
+            color: #764ba2;
+        }
+
+        .loading {
+            text-align: center;
+            color: #999;
+            font-style: italic;
+            padding: 20px;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .updating {
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .footer {
+            text-align: center;
+            color: white;
+            margin-top: 30px;
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌡️ ESP32 Temperature Monitor</h1>
+        <div class="subtitle">BMP280 Sensor - Real-time Data Dashboard</div>
+        
+        <div class="dashboard">
+            
+            <div class="card">
+                <div class="card-title">Current Temperature</div>
+                <div class="temperature-display updating" id="currentTemp">
+                    --<span class="unit">°C</span>
+                </div>
+                <div class="temperature-fahrenheit" id="currentTempF">
+                    -- °F
+                </div>
+                <div class="status waiting" id="connectionStatus">
+                    Waiting for connection...
+                </div>
+            </div>
+
+           
+            <div class="card">
+                <div class="card-title">Statistics</div>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-label">Minimum</div>
+                        <div class="stat-value" id="minTemp">--</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Maximum</div>
+                        <div class="stat-value" id="maxTemp">--</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Average</div>
+                        <div class="stat-value" id="avgTemp">--</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Readings</div>
+                        <div class="stat-value" id="countTemp">0</div>
+                    </div>
+                </div>
+            </div>
+
+            
+            <div class="card history-card">
+                <div class="card-title">Recent Readings (Last 20)</div>
+                <div class="history-list" id="historyList">
+                    <div class="loading">Waiting for temperature data...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            CSYE 6550 - IoT/Embedded Development | BMP280 Project
+        </div>
+    </div>
+
+    <script>
+        
+        const UPDATE_INTERVAL = 1000;
+
+        
+        function celsiusToFahrenheit(celsius) {
+            return (celsius * 9.0 / 5.0) + 32.0;
+        }
+
+        
+        async function updateCurrent() {
+            try {
+                const response = await fetch('/api/latest');
+                const data = await response.json();
+                
+                const tempDisplay = document.getElementById('currentTemp');
+                const tempFDisplay = document.getElementById('currentTempF');
+                const statusDisplay = document.getElementById('connectionStatus');
+                
+                if (data.temperature) {
+                    const tempC = data.temperature.temperature.toFixed(2);
+                    const tempF = celsiusToFahrenheit(data.temperature.temperature).toFixed(2);
+                    
+                    tempDisplay.innerHTML = `${tempC}<span class="unit">°C</span>`;
+                    tempFDisplay.textContent = `${tempF} °F`;
+                } else {
+                    tempDisplay.innerHTML = `--<span class="unit">°C</span>`;
+                    tempFDisplay.textContent = '-- °F';
+                }
+                
+                
+                statusDisplay.textContent = data.status;
+                if (data.status.includes('Connected')) {
+                    statusDisplay.className = 'status connected';
+                } else if (data.status.includes('Waiting') || data.status.includes('Listening')) {
+                    statusDisplay.className = 'status waiting';
+                } else {
+                    statusDisplay.className = 'status error';
+                }
+                
+            } catch (error) {
+                console.error('Error fetching current data:', error);
+            }
+        }
+
+        
+        async function updateStats() {
+            try {
+                const response = await fetch('/api/stats');
+                const stats = await response.json();
+                
+                document.getElementById('minTemp').textContent = 
+                    stats.min !== null ? stats.min.toFixed(2) + '°C' : '--';
+                document.getElementById('maxTemp').textContent = 
+                    stats.max !== null ? stats.max.toFixed(2) + '°C' : '--';
+                document.getElementById('avgTemp').textContent = 
+                    stats.avg !== null ? stats.avg.toFixed(2) + '°C' : '--';
+                document.getElementById('countTemp').textContent = stats.count;
+                
+            } catch (error) {
+                console.error('Error fetching stats:', error);
+            }
+        }
+
+        
+        async function updateHistory() {
+            try {
+                const response = await fetch('/api/history');
+                const result = await response.json();
+                
+                const historyList = document.getElementById('historyList');
+                
+                if (result.data && result.data.length > 0) {
+                    
+                    const recentData = result.data.slice(-20).reverse();
+                    
+                    historyList.innerHTML = recentData.map(item => {
+                        const tempF = celsiusToFahrenheit(item.temperature).toFixed(2);
+                        return `
+                            <div class="history-item">
+                                <span class="history-time">${item.timestamp}</span>
+                                <span class="history-temp">${item.temperature.toFixed(2)} °C (${tempF} °F)</span>
+                            </div>
+                        `;
+                    }).join('');
+                } else {
+                    historyList.innerHTML = '<div class="loading">No data received yet...</div>';
+                }
+                
+            } catch (error) {
+                console.error('Error fetching history:', error);
+            }
+        }
+
+        
+        function updateAll() {
+            updateCurrent();
+            updateStats();
+            updateHistory();
+        }
+
+        
+        updateAll();
+        setInterval(updateAll, UPDATE_INTERVAL);
+
+        console.log('Temperature monitoring system initialized');
+        console.log('Updates every ' + UPDATE_INTERVAL + 'ms');
+    </script>
+</body>
+</html>
+```
